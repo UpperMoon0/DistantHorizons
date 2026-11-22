@@ -530,8 +530,51 @@ if (isNotCommonProject) {
         relocate "com.electronwill.nightconfig", "${librariesLocation}.electronwill.nightconfig"
 
         mergeServiceFiles()
+
+        // ShadowJar merges dependency manifests; one shaded dependency carries
+        // Multi-Release: true. The remapper strips its versioned classes but
+        // preserves that attribute, yielding a JAR Forge SecureJar cannot open.
+        // Override the *shaded input manifest* as well as the plain Jar task.
+        if (project.name == 'forge' && rootProject.minecraft_version == '1.20.1') {
+            manifest {
+                attributes('Multi-Release': 'false')
+            }
+        }
     }
-    
+
+    if (project.name == 'forge' && rootProject.minecraft_version == '1.20.1') {
+        tasks.named('assemble').configure {
+            doLast {
+                // Inspect the actual release JAR after remap + API shading,
+                // never just forge:jar or forge:shadowJar intermediates.
+                File output = tasks.named('shadeDowngradedApi').get().archiveFile.get().asFile
+                new java.util.zip.ZipFile(output).withCloseable { archive ->
+                    def mf = archive.getEntry('META-INF/MANIFEST.MF')
+                    if (mf == null) {
+                        throw new GradleException("Forge 1.20.1 artifact lacks MANIFEST.MF")
+                    }
+                    def attributes = new java.util.jar.Manifest(
+                        archive.getInputStream(mf)).mainAttributes
+                    boolean multiRelease = 'true'.equalsIgnoreCase(
+                        attributes.getValue('Multi-Release'))
+                    boolean hasVersionedEntries = false
+                    def files = archive.entries()
+                    while (files.hasMoreElements()) {
+                        if (files.nextElement().name.startsWith('META-INF/versions/')) {
+                            hasVersionedEntries = true
+                            break
+                        }
+                    }
+                    if (multiRelease && !hasVersionedEntries) {
+                        throw new GradleException(
+                            "Forge 1.20.1 SecureJar cannot read a Multi-Release " +
+                            "manifest without META-INF/versions in " + output)
+                    }
+                }
+            }
+        }
+    }
+
     afterEvaluate {
         tasks.named("remapJar").configure {
             dependsOn(shadowJar)
