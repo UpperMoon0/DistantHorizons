@@ -862,7 +862,29 @@ if (isNotCommonProject) {
     // restores Multi-Release:true after ShadowJar has cleared it.
     if (project.name == 'forge' && rootProject.minecraft_version == '1.20.1') {
         tasks.named('shadeDowngradedApi').configure {
-            manifest.attributes('Multi-Release': 'false')
+            // JVMDowngrader regenerates the *final* manifest during shading,
+            // overwriting upstream Jar/ShadowJar Multi-Release attributes.
+            // Repair that final archive as the last action of this producer,
+            // so even directly executing shadeDowngradedApi is safe for Forge.
+            doLast {
+                File output = archiveFile.get().asFile
+                def fs = java.nio.file.FileSystems.newFileSystem(
+                    output.toPath(), (ClassLoader) null)
+                try {
+                    def mfPath = fs.getPath('META-INF/MANIFEST.MF')
+                    def manifest = new java.util.jar.Manifest(
+                        java.nio.file.Files.newInputStream(mfPath))
+                    manifest.mainAttributes.putValue('Multi-Release', 'false')
+                    def contents = new java.io.ByteArrayOutputStream()
+                    manifest.write(contents)
+                    java.nio.file.Files.write(
+                        mfPath, contents.toByteArray(),
+                        java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
+                        java.nio.file.StandardOpenOption.WRITE)
+                } finally {
+                    fs.close()
+                }
+            }
         }
     }
 
