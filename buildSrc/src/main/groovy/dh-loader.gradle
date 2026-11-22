@@ -166,12 +166,22 @@ if (isNotCommonProject) {
     jar {
         from "LICENSE.txt"
         manifest {
-            attributes(
+            // Forge 1.20.1 SecureJar scans META-INF/versions whenever a jar
+            // advertises Multi-Release: true. Our Forge 1.20.1 artifact does
+            // not contain any versioned class entries, so that attribute
+            // makes ModLauncher abort before regular mod discovery.
+            //
+            // Keep Multi-Release for other loader/version targets where it may
+            // actually be required, but do not claim it on this empty archive.
+            def jarAttributes = [
                 'Implementation-Title': rootProject.mod_name,
                 'Implementation-Version': rootProject.mod_version,
-                'Multi-Release': true,
                 'Main-Class': 'com.seibel.distanthorizons.core.jar.JarMain',
-            )
+            ]
+            if (!(project.name == 'forge' && rootProject.minecraft_version == '1.20.1')) {
+                jarAttributes['Multi-Release'] = true
+            }
+            attributes(jarAttributes)
             if (project.name == "forge112") {
                 attributes(
                     'MixinConnector': 'com.seibel.distanthorizons.forge112.DistantHorizonsMixinConnector',
