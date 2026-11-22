@@ -55,4 +55,37 @@ public class ChunkyAccessor extends AbstractChunkyAccessor
 		ChunkyProvider.get().getApi().onGenerationProgress((event) -> this.onGenEvent());
 		#endif
 	}
+
+	/**
+	 * Chunky registers its provider after the first server chunks can be loaded.
+	 * 3.3.3 calls the superclass setup from that earlier chunk event, which
+	 * permanently marks registration as complete before Chunky is available.
+	 *
+	 * Retry until registration succeeds, and rebind when a new provider is
+	 * installed (e.g. when an integrated server/world is restarted).
+	 */
+	private Object boundChunkyProvider;
+	
+	@Override
+	public synchronized void tryRunFirstTimeSetup()
+	{
+		#if MC_VER <= MC_1_18_2
+		super.tryRunFirstTimeSetup();
+		#else
+		try
+		{
+			Object provider = ChunkyProvider.get();
+			if (provider == null || provider == this.boundChunkyProvider)
+			{
+				return;
+			}
+			this.bindOnGenerationProgressEvent();
+			this.boundChunkyProvider = provider;
+		}
+		catch (IllegalStateException notYetLoaded)
+		{
+			// Chunky has not registered its API yet. Retry on a later chunk event.
+		}
+		#endif
+	}
 }
