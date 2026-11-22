@@ -857,6 +857,14 @@ if (isNotCommonProject) {
     jvmdg.downgradeTo = JavaVersion.toVersion(rootProject.java_version)
     downgradeJar.archiveClassifier.set(null)
     shadeDowngradedApi.archiveClassifier.set(null)
+    // Forge runs the *downgraded/re-shaded* archive, not the ShadowJar input.
+    // Correct the final artifact manifest as well; the downgrader otherwise
+    // restores Multi-Release:true after ShadowJar has cleared it.
+    if (project.name == 'forge' && rootProject.minecraft_version == '1.20.1') {
+        tasks.named('shadeDowngradedApi').configure {
+            manifest.attributes('Multi-Release': 'false')
+        }
+    }
 
     if (project.ext.needsDowngrade) {
         gradle.taskGraph.whenReady { graph ->
