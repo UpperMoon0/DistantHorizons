@@ -29,6 +29,13 @@ import com.seibel.distanthorizons.core.util.gridList.ArrayGridList;
 
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.levelgen.Heightmap;
+#if MC_VER >= MC_1_19_4 && MC_VER <= MC_1_20_4
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.ProtoChunk;
+import net.minecraft.world.level.levelgen.blending.Blender;
+#endif
 import com.seibel.distanthorizons.core.logging.DhLogger;
 
 #if MC_VER <= MC_1_20_4
@@ -90,6 +97,15 @@ public final class StepFeatures extends AbstractWorldGenStep
 				#else
 				if (worldGenRegion.hasChunk(chunkWrapper.getChunkPos().getX(), chunkWrapper.getChunkPos().getZ()))
 				{
+					#if MC_VER >= MC_1_19_4 && MC_VER <= MC_1_20_4
+					// TFC reads all biome sections in the surrounding 3x3 chunks.
+					// DH can retain EMPTY/default-biome ProtoChunks across overlapping regions.
+					// Populate those neighbors before TFC's feature decorator sees them.
+					if (this.dhChunkGen.isTfcFeatureNeighborGeneration())
+					{
+						this.restoreTfcNeighborBiomes(tParams, worldGenRegion, chunk);
+					}
+					#endif
 					this.dhChunkGen.globalParams.generator.applyBiomeDecoration(worldGenRegion, chunk, tParams.structFeatManager.forWorldGenRegion(worldGenRegion));
 				}
 				else
@@ -118,6 +134,67 @@ public final class StepFeatures extends AbstractWorldGenStep
 			}
 		}
 	}
-	
+
+	#if MC_VER >= MC_1_19_4 && MC_VER <= MC_1_20_4
+	/**
+	 * Repair only DH's temporary ProtoChunks. Never rewrite a persisted LevelChunk.
+	 * TFC's feature decorator reads every vertical biome section of the surrounding
+	 * 3x3 neighborhood, including chunks whose biome step was skipped by DH.
+	 */
+	private void restoreTfcNeighborBiomes(
+			ThreadWorldGenParams tParams, DhLitWorldGenRegion worldGenRegion, ChunkAccess target)
+	{
+		ChunkPos center = target.getPos();
+		for (int x = center.x - 1; x <= center.x + 1; x++)
+		{
+			for (int z = center.z - 1; z <= center.z + 1; z++)
+			{
+				if (!worldGenRegion.dhHasChunk(x, z))
+				{
+					throw new IllegalStateException("TFC feature biome neighbor outside DH region: [" + x + "," + z + "]");
+				}
+				ChunkAccess neighbor = worldGenRegion.getChunk(x, z);
+				if (!(neighbor instanceof ProtoChunk) || !containsDefaultPlainsBiome(neighbor))
+				{
+					continue;
+				}
+				this.dhChunkGen.confirmFutureWasRunSynchronously(
+						this.dhChunkGen.globalParams.generator.createBiomes(
+							Runnable::run,
+							this.dhChunkGen.globalParams.randomState,
+							Blender.of(worldGenRegion),
+							tParams.structFeatManager.forWorldGenRegion(worldGenRegion),
+							neighbor));
+				if (containsDefaultPlainsBiome(neighbor))
+				{
+					throw new IllegalStateException("TFC neighbor biome repair left minecraft:plains in [" + neighbor.getPos() + "]");
+				}
+			}
+		}
+	}
+
+	private static boolean containsDefaultPlainsBiome(ChunkAccess chunk)
+	{
+		for (LevelChunkSection section : chunk.getSections())
+		{
+			// maybeHas() inspects palette entries, including unused default IDs.
+			// Like TFC's feature decorator, only consider values actually in use.
+			final boolean[] containsPlains = { false };
+			section.getBiomes().getAll(biome ->
+			{
+				if (biome.is(Biomes.PLAINS))
+				{
+					containsPlains[0] = true;
+				}
+			});
+			if (containsPlains[0])
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+	#endif
+
 }
 #endif

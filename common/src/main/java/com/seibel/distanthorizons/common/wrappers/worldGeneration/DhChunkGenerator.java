@@ -275,7 +275,21 @@ public final class DhChunkGenerator implements IChunkGenerator
 	 *
 	 * Avoid a hard dependency on TFC or KubeJS-TFC (DH is also used without them).
 	 */
-	private static boolean requiresTfcFeatureNeighbors(ChunkGenerator generator)
+public boolean isTfcFeatureNeighborGeneration()
+	{
+		// KubeJS's WrappedChunkGenerator also serves non-TFC dimensions where
+		// minecraft:plains can be a valid biome. Repair actual TFC generators only.
+		for (Class<?> type = this.globalParams.generator.getClass(); type != null; type = type.getSuperclass())
+		{
+			if (type.getName().equals("net.dries007.tfc.world.TFCChunkGenerator"))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+		private static boolean requiresTfcFeatureNeighbors(ChunkGenerator generator)
 	{
 		for (Class<?> type = generator.getClass(); type != null; type = type.getSuperclass())
 		{
@@ -709,7 +723,12 @@ public final class DhChunkGenerator implements IChunkGenerator
 			}
 			
 			throwIfThreadInterrupted();
-			this.stepStructureReference.generateGroup(genEvent.threadedParam, region, GetCutoutFrom(chunkWrappersToGenerate, EDhApiWorldGenerationStep.STRUCTURE_REFERENCE));
+			// The TFC biome margin is needed only for feature decoration. Structure reference
+			// generation searches up to 8 chunks around each target; processing the extra
+			// biome-only ring would search past the preallocated structure neighborhood.
+			this.stepStructureReference.generateGroup(genEvent.threadedParam, region,
+					GetCutoutFrom(chunkWrappersToGenerate, Math.max(this.featureNeighborBorder,
+							WORLD_GEN_CHUNK_BORDER_NEEDED_BY_GEN_STEP.get(EDhApiWorldGenerationStep.STRUCTURE_REFERENCE))));
 			if (step == EDhApiWorldGenerationStep.STRUCTURE_REFERENCE)
 			{
 				return;
