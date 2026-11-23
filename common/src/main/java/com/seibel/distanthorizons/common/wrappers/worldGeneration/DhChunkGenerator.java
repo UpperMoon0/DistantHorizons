@@ -275,7 +275,9 @@ public final class DhChunkGenerator implements IChunkGenerator
 	 *
 	 * Avoid a hard dependency on TFC or KubeJS-TFC (DH is also used without them).
 	 */
-	private static boolean requiresTfcFeatureNeighbors(ChunkGenerator generator)
+public boolean isTfcFeatureNeighborGeneration() { return this.featureNeighborBorder > 0; }
+
+		private static boolean requiresTfcFeatureNeighbors(ChunkGenerator generator)
 	{
 		for (Class<?> type = generator.getClass(); type != null; type = type.getSuperclass())
 		{
