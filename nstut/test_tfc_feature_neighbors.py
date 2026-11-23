@@ -95,6 +95,20 @@ def test_structure_reference_neighborhood() -> None:
 
 
 
+def test_tfc_neighbor_biome_repair() -> None:
+    """Guard the 1.20.1-only repair and its no-world-chunk-mutation invariant."""
+    source = (SOURCE.parent / "step" / "StepFeatures.java").read_text(encoding="utf-8")
+    assert "if (this.dhChunkGen.isTfcFeatureNeighborGeneration())" in source
+    assert "this.restoreTfcNeighborBiomes(tParams, worldGenRegion, chunk)" in source
+    assert "worldGenRegion.dhHasChunk(x, z)" in source
+    assert "neighbor instanceof ProtoChunk" in source
+    assert "containsDefaultPlainsBiome(neighbor)" in source
+    assert "this.dhChunkGen.globalParams.generator.createBiomes(" in source
+    assert "Blender.of(worldGenRegion)" in source
+    assert "biome.is(Biomes.PLAINS)" in source
+    assert "TFC neighbor biome repair left minecraft:plains" in source
+
+
 def test_source_wiring() -> None:
     source = SOURCE.read_text(encoding="utf-8")
     assert "requiresTfcFeatureNeighbors(this.globalParams.generator) ? 1 : 0" in source
@@ -113,4 +127,5 @@ if __name__ == "__main__":
     test_border_geometry()
     test_structure_reference_neighborhood()
     test_source_wiring()
+    test_tfc_neighbor_biome_repair()
     print("TFC feature-neighbor biome margin regression PASSED")
