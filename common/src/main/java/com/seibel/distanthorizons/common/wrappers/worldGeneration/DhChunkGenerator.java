@@ -320,13 +320,29 @@ public boolean isTfcFeatureNeighborGeneration()
 		// operation to be done synchronously
 		if (!this.unsafeThreadingRecorded && !future.isDone())
 		{
-			LOGGER.warn(
-				"Unsafe MultiThreading in Distant Horizons Chunk Generator. \n" +
-					"This can happen if world generation is run on one of Minecraft's thread pools " +
-					"instead of the thread DH provided. \n" +
-					"This can likely be ignored, however if world generator crashes occur " +
-					"setting DH's world generation thread count to 1 may improve stability. ",
-				new RuntimeException("Incorrect thread pool use"));
+			// TFC's fillFromNoise intentionally uses Minecraft's backgroundExecutor()
+			// for noise filling, then completes the surface callback on the supplied
+			// executor. Passing Runnable::run cannot make the noise work synchronous.
+			// Keep joining the future below: its completion is the stage barrier.
+			#if MC_VER > MC_1_12_2
+			if (requiresTfcFeatureNeighbors(this.globalParams.generator))
+			{
+				LOGGER.info("TFC/KubeJS-TFC chunk generator returned an asynchronous noise future. " +
+					"Awaiting completion before the next DH generation stage. " +
+					"This is expected for TFC's Minecraft background executor; " +
+					"reducing DH's thread count does not change that executor.");
+			}
+			else
+			#endif
+			{
+				LOGGER.warn(
+					"Unsafe MultiThreading in Distant Horizons Chunk Generator. \n" +
+						"This can happen if world generation is run on one of Minecraft's thread pools " +
+						"instead of the thread DH provided. \n" +
+						"This can likely be ignored, however if world generator crashes occur " +
+						"setting DH's world generation thread count to 1 may improve stability. ",
+					new RuntimeException("Incorrect thread pool use"));
+			}
 			this.unsafeThreadingRecorded = true;
 		}
 		
