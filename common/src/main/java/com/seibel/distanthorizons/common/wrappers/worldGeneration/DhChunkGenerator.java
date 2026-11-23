@@ -275,7 +275,19 @@ public final class DhChunkGenerator implements IChunkGenerator
 	 *
 	 * Avoid a hard dependency on TFC or KubeJS-TFC (DH is also used without them).
 	 */
-public boolean isTfcFeatureNeighborGeneration() { return this.featureNeighborBorder > 0; }
+public boolean isTfcFeatureNeighborGeneration()
+	{
+		// KubeJS's WrappedChunkGenerator also serves non-TFC dimensions where
+		// minecraft:plains can be a valid biome. Repair actual TFC generators only.
+		for (Class<?> type = this.globalParams.generator.getClass(); type != null; type = type.getSuperclass())
+		{
+			if (type.getName().equals("net.dries007.tfc.world.TFCChunkGenerator"))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
 
 		private static boolean requiresTfcFeatureNeighbors(ChunkGenerator generator)
 	{
