@@ -151,6 +151,8 @@ public final class DhChunkGenerator implements IChunkGenerator
 	
 	public final LinkedBlockingQueue<ChunkGenEvent> generationEventQueue = new LinkedBlockingQueue<>();
 	public final GlobalWorldGenParams globalParams;
+	/** Extra generated-biome margin required by feature decorators that inspect adjacent chunks. */
+	private final int featureNeighborBorder;
 	
 	#if MC_VER <= MC_1_12_2
 	#elif MC_VER <= MC_26_2_0
@@ -224,6 +226,17 @@ public final class DhChunkGenerator implements IChunkGenerator
 		this.dhServerLevel = dhServerLevel;
 		this.updateManager = WorldChunkUpdateManager.INSTANCE.getByLevelWrapper(this.dhServerLevel.getServerLevelWrapper());
 		this.globalParams = new GlobalWorldGenParams(dhServerLevel);
+		#if MC_VER > MC_1_12_2
+		// TFC scans a 3x3 biome neighborhood during feature decoration. Without this
+		// margin, DH passes EMPTY edge chunks with unrelated default biomes to TFC.
+		this.featureNeighborBorder = requiresTfcFeatureNeighbors(this.globalParams.generator) ? 1 : 0;
+		if (this.featureNeighborBorder > 0)
+		{
+			LOGGER.info("Enabling a one-chunk biome margin for feature generation: [" + this.globalParams.generator.getClass().getName() + "]");
+		}
+		#else
+		this.featureNeighborBorder = 0;
+		#endif
 		this.internalServerGenerator = new DhInternalServerGenerator(this.globalParams, this.dhServerLevel);
 		
 		#if MC_VER > MC_1_12_2
@@ -253,6 +266,30 @@ public final class DhChunkGenerator implements IChunkGenerator
 	
 	
 	
+
+	#if MC_VER > MC_1_12_2
+	/**
+	 * TerraFirmaCraft's biome decoration traverses each target chunk's 3x3
+	 * neighborhood. KubeJS-TFC wraps the same generator; do not force this
+	 * extra work on other modpacks/dimensions.
+	 *
+	 * Avoid a hard dependency on TFC or KubeJS-TFC (DH is also used without them).
+	 */
+	private static boolean requiresTfcFeatureNeighbors(ChunkGenerator generator)
+	{
+		for (Class<?> type = generator.getClass(); type != null; type = type.getSuperclass())
+		{
+			String name = type.getName();
+			if (name.equals("net.dries007.tfc.world.TFCChunkGenerator")
+				|| name.equals("com.notenoughmail.kubejs_tfc.util.implementation.custom.world.WrappedChunkGenerator"))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+	#endif
+
 	//=================//
 	// synchronization //
 	//=================//
@@ -361,7 +398,7 @@ public final class DhChunkGenerator implements IChunkGenerator
 		this.internalServerGenerator.generateChunksViaInternalServer(genEvent);
 		
 		#else
-		int borderSize = MAX_WORLD_GEN_CHUNK_BORDER_NEEDED;
+		int borderSize = Math.max(MAX_WORLD_GEN_CHUNK_BORDER_NEEDED, this.featureNeighborBorder);
 		// genEvent.size - 1 converts the even width size to an odd number for MC compatability
 		int refSize = (genEvent.widthInChunks - 1) + (borderSize * 2);
 		int refPosX = genEvent.minChunkPos.getX() - borderSize;
@@ -731,7 +768,9 @@ public final class DhChunkGenerator implements IChunkGenerator
 			#endif
 			
 			throwIfThreadInterrupted();
-			this.stepFeatures.generateGroup(genEvent.threadedParam, region, GetCutoutFrom(chunkWrappersToGenerate, EDhApiWorldGenerationStep.FEATURES));
+			this.stepFeatures.generateGroup(genEvent.threadedParam, region,
+					GetCutoutFrom(chunkWrappersToGenerate, Math.max(this.featureNeighborBorder,
+							WORLD_GEN_CHUNK_BORDER_NEEDED_BY_GEN_STEP.get(EDhApiWorldGenerationStep.FEATURES))));
 		}
 		finally
 		{
