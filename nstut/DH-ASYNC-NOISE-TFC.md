@@ -1,0 +1,7 @@
+# DH #6 — TFC asynchronous noise diagnostics
+
+Evidence: TFC 1.20.x `TFCChunkGenerator.fillFromNoise` schedules the main fill using `CompletableFuture.supplyAsync(..., Util.backgroundExecutor())`, then runs the surface completion via `whenCompleteAsync(..., mainExecutor)`. DH's `Runnable::run` completion executor cannot force TFC's noise fill onto the DH thread. The future may therefore legitimately be incomplete when DH checks `isDone()`.
+
+The old warning emitted a full RuntimeException stack trace once per DH generator and recommended lowering DH thread count. That advice does not remove TFC's own background executor. Treat this known TFC case (including KubeJS-TFC wrappers whose actual `getWrapped()` delegate is TFC) as an informational, once-per-generator diagnostic, retaining a WARN + trace for unknown generators. KubeJS-TFC can wrap arbitrary noise generators, so a wrapper classname alone is never sufficient to suppress an unsafe-threading warning. **Always `join()` before the next worldgen step**; exceptions must continue propagating.
+
+This change does not prove thread safety or parallel throughput and does not change generation scheduling. For release acceptance, use an isolated Forge 1.20.1 + TFC workload with two DH threads, repeated chunks and SQLite integrity, then compare a single-thread trial if there is measurable instability. Count INFO/WARN events and keep old .8 binary immutable. No production restart is part of this source change.

@@ -302,6 +302,45 @@ public boolean isTfcFeatureNeighborGeneration()
 		}
 		return false;
 	}
+
+	/**
+	 * Only classify an incomplete noise future as TFC's known async handoff when
+	 * the actual noise generator is TFC. KubeJS-TFC can wrap arbitrary generators,
+	 * so matching the wrapper name alone could hide an unrelated threading bug.
+	 */
+	private boolean usesTfcAsyncNoiseGenerator()
+	{
+		ChunkGenerator generator = this.globalParams.generator;
+		for (int depth = 0; depth < 4; depth++)
+		{
+			for (Class<?> type = generator.getClass(); type != null; type = type.getSuperclass())
+			{
+				if (type.getName().equals("net.dries007.tfc.world.TFCChunkGenerator"))
+				{
+					return true;
+				}
+			}
+
+			if (!generator.getClass().getName().equals("com.notenoughmail.kubejs_tfc.util.implementation.custom.world.WrappedChunkGenerator"))
+			{
+				return false;
+			}
+			try
+			{
+				Object wrapped = generator.getClass().getMethod("getWrapped").invoke(generator);
+				if (!(wrapped instanceof ChunkGenerator) || wrapped == generator)
+				{
+					return false;
+				}
+				generator = (ChunkGenerator) wrapped;
+			}
+			catch (ReflectiveOperationException | SecurityException e)
+			{
+				return false; // unknown generator: retain the original warning
+			}
+		}
+		return false; // refuse unbounded wrapper chains
+	}
 	#endif
 
 	//=================//
@@ -320,13 +359,29 @@ public boolean isTfcFeatureNeighborGeneration()
 		// operation to be done synchronously
 		if (!this.unsafeThreadingRecorded && !future.isDone())
 		{
-			LOGGER.warn(
-				"Unsafe MultiThreading in Distant Horizons Chunk Generator. \n" +
-					"This can happen if world generation is run on one of Minecraft's thread pools " +
-					"instead of the thread DH provided. \n" +
-					"This can likely be ignored, however if world generator crashes occur " +
-					"setting DH's world generation thread count to 1 may improve stability. ",
-				new RuntimeException("Incorrect thread pool use"));
+			// TFC's fillFromNoise intentionally uses Minecraft's backgroundExecutor()
+			// for noise filling, then completes the surface callback on the supplied
+			// executor. Passing Runnable::run cannot make the noise work synchronous.
+			// Keep joining the future below: its completion is the stage barrier.
+			#if MC_VER > MC_1_12_2
+			if (this.usesTfcAsyncNoiseGenerator())
+			{
+				LOGGER.info("TFC/KubeJS-TFC chunk generator returned an asynchronous noise future. " +
+					"Awaiting completion before the next DH generation stage. " +
+					"This is expected for TFC's Minecraft background executor; " +
+					"reducing DH's thread count does not change that executor.");
+			}
+			else
+			#endif
+			{
+				LOGGER.warn(
+					"Unsafe MultiThreading in Distant Horizons Chunk Generator. \n" +
+						"This can happen if world generation is run on one of Minecraft's thread pools " +
+						"instead of the thread DH provided. \n" +
+						"This can likely be ignored, however if world generator crashes occur " +
+						"setting DH's world generation thread count to 1 may improve stability. ",
+					new RuntimeException("Incorrect thread pool use"));
+			}
 			this.unsafeThreadingRecorded = true;
 		}
 		
