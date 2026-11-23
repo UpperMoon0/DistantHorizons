@@ -131,3 +131,6 @@ if __name__ == "__main__":
     test_source_wiring()
     test_tfc_neighbor_biome_repair()
     print("TFC feature-neighbor biome margin regression PASSED")
+    # The existing native source test entrypoint also exercises TFC async completion.
+    import runpy
+    runpy.run_path(str(REPO_ROOT / "nstut/test_tfc_async_noise.py"), run_name="__main__")
