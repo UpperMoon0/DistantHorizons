@@ -9,7 +9,11 @@ method = source.split("public <T> T confirmFutureWasRunSynchronously(", 1)[1].sp
 
 assert "if (!this.unsafeThreadingRecorded && !future.isDone())" in method
 assert "#if MC_VER > MC_1_12_2" in method
-assert "requiresTfcFeatureNeighbors(this.globalParams.generator)" in method
+assert "this.usesTfcAsyncNoiseGenerator()" in method
+assert "private boolean usesTfcAsyncNoiseGenerator()" in source
+assert "getMethod(\"getWrapped\")" in source
+assert "wrapped == generator" in source
+assert "ReflectiveOperationException | SecurityException" in source
 assert 'LOGGER.info("TFC/KubeJS-TFC chunk generator returned an asynchronous noise future.' in method
 assert 'LOGGER.warn(' in method and 'new RuntimeException("Incorrect thread pool use")' in method
 assert "this.unsafeThreadingRecorded = true;" in method
