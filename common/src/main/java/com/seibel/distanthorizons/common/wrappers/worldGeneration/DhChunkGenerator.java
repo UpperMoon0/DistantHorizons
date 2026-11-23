@@ -302,6 +302,45 @@ public boolean isTfcFeatureNeighborGeneration()
 		}
 		return false;
 	}
+
+	/**
+	 * Only classify an incomplete noise future as TFC's known async handoff when
+	 * the actual noise generator is TFC. KubeJS-TFC can wrap arbitrary generators,
+	 * so matching the wrapper name alone could hide an unrelated threading bug.
+	 */
+	private boolean usesTfcAsyncNoiseGenerator()
+	{
+		ChunkGenerator generator = this.globalParams.generator;
+		for (int depth = 0; depth < 4; depth++)
+		{
+			for (Class<?> type = generator.getClass(); type != null; type = type.getSuperclass())
+			{
+				if (type.getName().equals("net.dries007.tfc.world.TFCChunkGenerator"))
+				{
+					return true;
+				}
+			}
+
+			if (!generator.getClass().getName().equals("com.notenoughmail.kubejs_tfc.util.implementation.custom.world.WrappedChunkGenerator"))
+			{
+				return false;
+			}
+			try
+			{
+				Object wrapped = generator.getClass().getMethod("getWrapped").invoke(generator);
+				if (!(wrapped instanceof ChunkGenerator) || wrapped == generator)
+				{
+					return false;
+				}
+				generator = (ChunkGenerator) wrapped;
+			}
+			catch (ReflectiveOperationException | SecurityException e)
+			{
+				return false; // unknown generator: retain the original warning
+			}
+		}
+		return false; // refuse unbounded wrapper chains
+	}
 	#endif
 
 	//=================//
@@ -325,7 +364,7 @@ public boolean isTfcFeatureNeighborGeneration()
 			// executor. Passing Runnable::run cannot make the noise work synchronous.
 			// Keep joining the future below: its completion is the stage barrier.
 			#if MC_VER > MC_1_12_2
-			if (requiresTfcFeatureNeighbors(this.globalParams.generator))
+			if (this.usesTfcAsyncNoiseGenerator())
 			{
 				LOGGER.info("TFC/KubeJS-TFC chunk generator returned an asynchronous noise future. " +
 					"Awaiting completion before the next DH generation stage. " +
