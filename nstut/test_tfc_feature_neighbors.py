@@ -61,10 +61,49 @@ def test_border_geometry() -> None:
     )
 
 
+
+def test_structure_reference_neighborhood() -> None:
+    """References inspect a radius of 8, so never process the biome-only ring."""
+    width = 4
+    margin = 1
+    reference_radius = 8
+    requested = {(x, z) for x in range(width) for z in range(width)}
+    allocated = {
+        (x, z)
+        for x in range(-reference_radius, width + reference_radius)
+        for z in range(-reference_radius, width + reference_radius)
+    }
+    structure_targets, regions = generated_and_decorated_chunks(width, margin)
+    assert structure_targets == requested
+
+    for full_region, interior in regions:
+        # Old .3 behavior: references on full_region hit -9 or 12,
+        # while DH preallocates only from -8 through 11.
+        assert any(
+            (x + dx, z + dz) not in allocated
+            for x, z in full_region
+            for dx in (-reference_radius, reference_radius)
+            for dz in (-reference_radius, reference_radius)
+        )
+        # New behavior: references only on interior stay within that allocation.
+        for x, z in interior:
+            assert all(
+                (x + dx, z + dz) in allocated
+                for dx in range(-reference_radius, reference_radius + 1)
+                for dz in range(-reference_radius, reference_radius + 1)
+            ), (x, z)
+
+
+
 def test_source_wiring() -> None:
     source = SOURCE.read_text(encoding="utf-8")
     assert "requiresTfcFeatureNeighbors(this.globalParams.generator) ? 1 : 0" in source
     assert "Math.max(MAX_WORLD_GEN_CHUNK_BORDER_NEEDED, this.featureNeighborBorder)" in source
+    reference_section = source.split("this.stepStructureReference.generateGroup(", 1)[1].split(
+        "if (step == EDhApiWorldGenerationStep.STRUCTURE_REFERENCE)", 1
+    )[0]
+    assert "Math.max(this.featureNeighborBorder," in reference_section
+    assert "WORLD_GEN_CHUNK_BORDER_NEEDED_BY_GEN_STEP.get(EDhApiWorldGenerationStep.STRUCTURE_REFERENCE)" in reference_section
     assert "GetCutoutFrom(chunkWrappersToGenerate, Math.max(this.featureNeighborBorder," in source
     assert '"net.dries007.tfc.world.TFCChunkGenerator"' in source
     assert '"com.notenoughmail.kubejs_tfc.util.implementation.custom.world.WrappedChunkGenerator"' in source
@@ -72,5 +111,6 @@ def test_source_wiring() -> None:
 
 if __name__ == "__main__":
     test_border_geometry()
+    test_structure_reference_neighborhood()
     test_source_wiring()
     print("TFC feature-neighbor biome margin regression PASSED")
