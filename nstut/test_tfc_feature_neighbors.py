@@ -106,6 +106,8 @@ def test_tfc_neighbor_biome_repair() -> None:
     assert "this.dhChunkGen.globalParams.generator.createBiomes(" in source
     assert "Blender.of(worldGenRegion)" in source
     assert "biome.is(Biomes.PLAINS)" in source
+    assert "section.getBiomes().getAll(biome ->" in source
+    assert "maybeHas(biome ->" not in source
     assert "TFC neighbor biome repair left minecraft:plains" in source
 
 
