@@ -177,7 +177,17 @@ public final class StepFeatures extends AbstractWorldGenStep
 	{
 		for (LevelChunkSection section : chunk.getSections())
 		{
-			if (section.getBiomes().maybeHas(biome -> biome.is(Biomes.PLAINS)))
+			// maybeHas() inspects palette entries, including unused default IDs.
+			// Like TFC's feature decorator, only consider values actually in use.
+			final boolean[] containsPlains = { false };
+			section.getBiomes().getAll(biome ->
+			{
+				if (biome.is(Biomes.PLAINS))
+				{
+					containsPlains[0] = true;
+				}
+			});
+			if (containsPlains[0])
 			{
 				return true;
 			}
